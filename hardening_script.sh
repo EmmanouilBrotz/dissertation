@@ -502,8 +502,11 @@ cp /etc/rkhunter.conf "$BACKUP_DIR/" 2>/dev/null || true
 
 # Fix rkhunter configuration
 sed -i 's|^WEB_CMD=.*|WEB_CMD=""|' /etc/rkhunter.conf
+sed -i 's|^UPDATE_MIRRORS=.*|UPDATE_MIRRORS=0|' /etc/rkhunter.conf
+sed -i 's|^MIRRORS_MODE=.*|MIRRORS_MODE=0|' /etc/rkhunter.conf
 
-rkhunter --update
+# Update rkhunter (ignore update failures, use package-provided database)
+rkhunter --update 2>/dev/null || echo -e "${YELLOW}[*] Using package-provided rkhunter database${NC}"
 rkhunter --propupd
 
 # Schedule weekly scans
