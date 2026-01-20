@@ -371,10 +371,10 @@ host:
   prealloc: 1000
   memcap: 32mb
 
-# IP Reputation
-reputation-categories-file: /etc/suricata/iprep/categories.txt
-default-reputation-path: /etc/suricata/iprep
-reputation-files:
+# IP Reputation (disabled - no reputation files configured)
+# reputation-categories-file: /etc/suricata/iprep/categories.txt
+# default-reputation-path: /etc/suricata/iprep
+# reputation-files:
 
 # Defragmentation
 defrag:
@@ -434,7 +434,7 @@ pcap-file:
 # Rule files (managed by suricata-update)
 default-rule-path: /var/lib/suricata/rules
 rule-files:
-  - suricata.rules
+  - "*.rules"
 
 # Classification config
 classification-file: /etc/suricata/classification.config
@@ -517,6 +517,22 @@ mkdir -p /var/log/suricata/files
 mkdir -p /var/lib/suricata/rules
 chown -R suricata:suricata /var/log/suricata
 chmod -R 755 /var/log/suricata
+
+################################################################################
+# Update Suricata rules
+################################################################################
+echo -e "${GREEN}[+] Updating Suricata rulesets...${NC}"
+echo -e "${YELLOW}[*] This may take a few minutes...${NC}"
+
+# Run suricata-update to download rules
+suricata-update
+
+# Verify rules were downloaded
+if [ ! -f /var/lib/suricata/rules/suricata.rules ]; then
+    echo -e "${RED}[!] Warning: Rules file not found after update${NC}"
+    echo -e "${YELLOW}[*] Creating empty rules file for now...${NC}"
+    touch /var/lib/suricata/rules/suricata.rules
+fi
 
 ################################################################################
 # Configure log rotation
