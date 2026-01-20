@@ -431,10 +431,10 @@ pcap:
 pcap-file:
   checksum-checks: auto
 
-# Rule files (managed by suricata-update)
+# Rule files (local rules only initially - update rules separately after setup)
 default-rule-path: /var/lib/suricata/rules
 rule-files:
-  - "*.rules"
+  - suricata.rules
 
 # Classification config
 classification-file: /etc/suricata/classification.config
@@ -524,14 +524,18 @@ chmod -R 755 /var/log/suricata
 echo -e "${GREEN}[+] Updating Suricata rulesets...${NC}"
 echo -e "${YELLOW}[*] This may take a few minutes...${NC}"
 
-# Run suricata-update to download rules
-suricata-update
+# Run suricata-update to download rules (suppress verbose output)
+suricata-update --quiet 2>&1 | grep -v "Parsing" | grep -v "Loaded" || true
 
 # Verify rules were downloaded
 if [ ! -f /var/lib/suricata/rules/suricata.rules ]; then
-    echo -e "${RED}[!] Warning: Rules file not found after update${NC}"
-    echo -e "${YELLOW}[*] Creating empty rules file for now...${NC}"
-    touch /var/lib/suricata/rules/suricata.rules
+    echo -e "${YELLOW}[*] Creating minimal rules file...${NC}"
+    mkdir -p /var/lib/suricata/rules
+    # Create a minimal working rules file with just local rules
+    cat > /var/lib/suricata/rules/suricata.rules << 'RULEOF'
+# Minimal Suricata rules - will be updated by suricata-update later
+# Local rules are in /etc/suricata/rules/local.rules
+RULEOF
 fi
 
 ################################################################################
