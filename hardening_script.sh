@@ -499,6 +499,10 @@ apt-get install -y rkhunter chkrootkit
 
 # Configure rkhunter
 cp /etc/rkhunter.conf "$BACKUP_DIR/" 2>/dev/null || true
+
+# Fix rkhunter configuration
+sed -i 's|^WEB_CMD=.*|WEB_CMD=""|' /etc/rkhunter.conf
+
 rkhunter --update
 rkhunter --propupd
 
