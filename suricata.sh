@@ -519,24 +519,17 @@ chown -R suricata:suricata /var/log/suricata
 chmod -R 755 /var/log/suricata
 
 ################################################################################
-# Update Suricata rules
+# Create minimal rules file
 ################################################################################
-echo -e "${GREEN}[+] Updating Suricata rulesets...${NC}"
-echo -e "${YELLOW}[*] This may take a few minutes...${NC}"
+echo -e "${GREEN}[+] Creating minimal rules file...${NC}"
 
-# Run suricata-update to download rules (suppress verbose output)
-suricata-update --quiet 2>&1 | grep -v "Parsing" | grep -v "Loaded" || true
-
-# Verify rules were downloaded
-if [ ! -f /var/lib/suricata/rules/suricata.rules ]; then
-    echo -e "${YELLOW}[*] Creating minimal rules file...${NC}"
-    mkdir -p /var/lib/suricata/rules
-    # Create a minimal working rules file with just local rules
-    cat > /var/lib/suricata/rules/suricata.rules << 'RULEOF'
-# Minimal Suricata rules - will be updated by suricata-update later
-# Local rules are in /etc/suricata/rules/local.rules
+cat > /var/lib/suricata/rules/suricata.rules << 'RULEOF'
+# Minimal Suricata rules file
+# Rules will be updated separately after initial configuration
+# Local custom rules are in /etc/suricata/rules/local.rules
 RULEOF
-fi
+
+echo -e "${YELLOW}[*] Note: Rule updates will be done after Suricata is running${NC}"
 
 ################################################################################
 # Configure log rotation
@@ -657,11 +650,13 @@ echo -e "  TLS logs:            /var/log/suricata/tls.log"
 echo -e "  Packet captures:     /var/log/suricata/log.pcap"
 echo ""
 echo -e "${YELLOW}Next Steps:${NC}"
-echo -e "  1. Monitor alerts: ${GREEN}sudo tail -f /var/log/suricata/fast.log${NC}"
-echo -e "  2. Generate test traffic and verify detection"
-echo -e "  3. Configure ELK Stack to ingest /var/log/suricata/eve.json"
-echo -e "  4. Fine-tune rules based on your environment"
-echo -e "  5. Set up Filebeat to ship logs to ELK (recommended)"
+echo -e "  1. Update rules manually: ${GREEN}sudo suricata-update -o /var/lib/suricata/rules${NC}"
+echo -e "  2. Restart after rule update: ${GREEN}sudo systemctl restart suricata${NC}"
+echo -e "  3. Monitor alerts: ${GREEN}sudo tail -f /var/log/suricata/fast.log${NC}"
+echo -e "  4. Generate test traffic and verify detection"
+echo -e "  5. Configure ELK Stack to ingest /var/log/suricata/eve.json"
+echo -e "  6. Fine-tune rules based on your environment"
+echo -e "  7. Set up Filebeat to ship logs to ELK (recommended)"
 echo ""
 echo -e "${GREEN}Suricata is now protecting your network!${NC}"
 echo ""
