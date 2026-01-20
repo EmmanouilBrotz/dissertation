@@ -85,7 +85,7 @@ vars:
     SSH_PORTS: 22
     DNP3_PORTS: 20000
     MODBUS_PORTS: 502
-    FILE_DATA_PORTS: "[$HTTP_PORTS,110,143]"
+    FILE_DATA_PORTS: "80,110,143"
     FTP_PORTS: 21
     GENEVE_PORTS: 6081
     VXLAN_PORTS: 4789
@@ -247,7 +247,6 @@ app-layer:
     
     smtp:
       enabled: yes
-      raw-extraction: yes
       mime:
         decode-mime: yes
         decode-base64: yes
