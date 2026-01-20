@@ -462,6 +462,9 @@ echo -e "${GREEN}[+] Suricata configuration created${NC}"
 ################################################################################
 echo -e "${GREEN}[+] Configuring alert thresholds...${NC}"
 
+# Backup existing threshold config if it exists
+cp /etc/suricata/threshold.config "$BACKUP_DIR/threshold.config" 2>/dev/null || true
+
 cat > /etc/suricata/threshold.config << 'EOF'
 # Threshold configuration to reduce false positives
 # Format: threshold gen_id <gid>, sig_id <sid>, type <threshold|limit|both>, track <by_src|by_dst>, count <N>, seconds <T>
@@ -480,6 +483,9 @@ EOF
 # Create custom local rules
 ################################################################################
 echo -e "${GREEN}[+] Creating local custom rules...${NC}"
+
+# Create rules directory if it doesn't exist
+mkdir -p /etc/suricata/rules
 
 cat > /etc/suricata/rules/local.rules << 'EOF'
 # Local custom rules for 192.168.10.0/24 network
@@ -509,6 +515,7 @@ EOF
 echo -e "${GREEN}[+] Setting up log directories...${NC}"
 
 mkdir -p /var/log/suricata/files
+mkdir -p /var/lib/suricata/rules
 chown -R suricata:suricata /var/log/suricata
 chmod -R 755 /var/log/suricata
 
