@@ -1,0 +1,685 @@
+<!--
+  COMPREHENSIVE SECURITY RULES - DISSERTATION PROJECT
+  Coverage: Authentication, Privilege Escalation, File Integrity, Network Threats,
+  Malware, Persistence, Defense Evasion, Data Exfiltration
+  Total Rules: 40+
+-->
+
+<group name="local,authentication,ssh,">
+
+  <!-- Rule 100001: SSH successful login -->
+  <rule id="100001" level="3">
+    <if_sid>5501</if_sid>
+    <description>SSH: Successful authentication</description>
+    <group>authentication_success,pci_dss_10.2.5,</group>
+  </rule>
+
+  <!-- Rule 100002: SSH lateral movement - Jump host to Target VM -->
+  <rule id="100002" level="10">
+    <if_sid>100001</if_sid>
+    <hostname>target-vm</hostname>
+    <description>SSH: LATERAL MOVEMENT - Login to target-vm detected</description>
+    <mitre>
+      <id>T1021.004</id>
+    </mitre>
+    <group>lateral_movement,attack,</group>
+  </rule>
+
+  <!-- Rule 100003: Multiple SSH connections in short time (lateral movement pattern) -->
+  <rule id="100003" level="12" frequency="3" timeframe="60">
+    <if_matched_sid>100002</if_matched_sid>
+    <description>SSH: CRITICAL - Rapid lateral movement detected (3 logins in 60s)</description>
+    <mitre>
+      <id>T1021.004</id>
+    </mitre>
+    <group>lateral_movement,attack,</group>
+  </rule>
+
+  <!-- Rule 100004: SSH failed login attempt -->
+  <rule id="100004" level="5">
+    <if_sid>5503,5504,5551</if_sid>
+    <description>SSH: Failed authentication attempt</description>
+    <group>authentication_failed,pci_dss_10.2.4,pci_dss_10.2.5,</group>
+  </rule>
+
+  <!-- Rule 100005: SSH brute force - Multiple failed attempts -->
+  <rule id="100005" level="10" frequency="5" timeframe="120">
+    <if_matched_sid>100004</if_matched_sid>
+    <same_source_ip />
+    <description>SSH: BRUTE FORCE ATTACK - 5+ failed attempts from same IP in 2 minutes</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,brute_force,pci_dss_11.4,pci_dss_10.2.4,pci_dss_10.2.5,</group>
+  </rule>
+
+  <!-- Rule 100006: SSH brute force - CRITICAL (10+ attempts) -->
+  <rule id="100006" level="12" frequency="10" timeframe="180">
+    <if_matched_sid>100004</if_matched_sid>
+    <same_source_ip />
+    <description>SSH: CRITICAL BRUTE FORCE - 10+ failed attempts, auto-blocking IP</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>authentication_failures,brute_force,attack,</group>
+  </rule>
+
+  <!-- Rule 100007: Root login via SSH -->
+  <rule id="100007" level="8">
+    <if_sid>5501</if_sid>
+    <user>root</user>
+    <description>SSH: Direct root login detected (security violation)</description>
+    <group>authentication_success,policy_violation,</group>
+  </rule>
+
+  <!-- Rule 100008: SSH login from new/unusual location -->
+  <rule id="100008" level="7">
+    <if_sid>5501</if_sid>
+    <description>SSH: Login from new source IP (baseline anomaly)</description>
+    <group>authentication_success,anomaly,</group>
+  </rule>
+
+</group>
+
+<group name="local,privilege_escalation,">
+
+  <!-- Rule 100010: Sudo command executed (baseline) -->
+  <rule id="100010" level="3">
+    <program_name>^sudo$</program_name>
+    <regex>COMMAND</regex>
+    <description>Privilege Escalation: Sudo command executed</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>privilege_escalation,</group>
+  </rule>
+
+  <!-- Rule 100011: Multiple sudo attempts (suspicious activity) -->
+  <rule id="100011" level="8" frequency="5" timeframe="300">
+    <if_matched_sid>100010</if_matched_sid>
+    <same_user />
+    <description>Privilege Escalation: Excessive sudo usage (5 in 5 minutes)</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>privilege_escalation,suspicious,</group>
+  </rule>
+
+  <!-- Rule 100012: Failed sudo attempt -->
+  <rule id="100012" level="7">
+    <program_name>^sudo$</program_name>
+    <regex>authentication failure|NOT in sudoers|incorrect password</regex>
+    <description>Privilege Escalation: FAILED sudo attempt</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>privilege_escalation,authentication_failed,</group>
+  </rule>
+
+  <!-- Rule 100013: Multiple failed sudo attempts (potential privilege escalation attack) -->
+  <rule id="100013" level="10" frequency="3" timeframe="120">
+    <if_matched_sid>100012</if_matched_sid>
+    <same_user />
+    <description>Privilege Escalation: ATTACK - Multiple failed sudo attempts</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>privilege_escalation,attack,</group>
+  </rule>
+
+  <!-- Rule 100014: Su command usage -->
+  <rule id="100014" level="5">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">^su$|/bin/su</field>
+    <description>Privilege Escalation: Su command executed</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>privilege_escalation,</group>
+  </rule>
+
+  <!-- Rule 100015: User added to sudo/wheel/admin group -->
+  <rule id="100015" level="12">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">usermod</field>
+    <regex>sudo|wheel|admin</regex>
+    <description>Account Manipulation: User added to privileged group (PERSISTENCE)</description>
+    <mitre>
+      <id>T1078</id>
+      <id>T1098</id>
+    </mitre>
+    <group>privilege_escalation,persistence,account_manipulation,</group>
+  </rule>
+  <!-- Rule 100016: SUID binary execution (potential privilege escalation) -->
+  <rule id="100016" level="8">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.key">suid_execution</field>
+    <description>Privilege Escalation: SUID binary executed</description>
+    <mitre>
+      <id>T1548.001</id>
+    </mitre>
+    <group>privilege_escalation,</group>
+  </rule>
+
+  <!-- Rule 100017: Suspicious shell spawned by web server -->
+  <rule id="100017" level="12">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">/bin/bash|/bin/sh|/usr/bin/python|/usr/bin/perl</field>
+    <field name="audit.ppid_name">apache2|nginx|httpd|www-data</field>
+    <description>Web Attack: Shell spawned by web server process (WEBSHELL)</description>
+    <mitre>
+      <id>T1505.003</id>
+      <id>T1059</id>
+    </mitre>
+    <group>web_attack,webshell,command_execution,</group>
+  </rule>
+
+</group>
+
+<group name="local,account_management,">
+
+  <!-- Rule 100020: New user account created -->
+  <rule id="100020" level="8">
+    <if_sid>5902</if_sid>
+    <description>Account Created: New user account added to system</description>
+    <mitre>
+      <id>T1136.001</id>
+    </mitre>
+    <group>account_management,adduser,</group>
+  </rule>
+
+  <!-- Rule 100021: User account deleted -->
+  <rule id="100021" level="8">
+    <if_sid>5903</if_sid>
+    <description>Account Deleted: User account removed from system</description>
+    <group>account_management,</group>
+  </rule>
+
+  <!-- Rule 100022: Password changed -->
+  <rule id="100022" level="5">
+    <if_sid>5555</if_sid>
+    <description>Account Modified: User password changed</description>
+    <group>account_management,</group>
+  </rule>
+
+  <!-- Rule 100023: Multiple account creations (suspicious) -->
+  <rule id="100023" level="12" frequency="3" timeframe="300">
+    <if_matched_sid>100020</if_matched_sid>
+    <description>Account Creation: SUSPICIOUS - Multiple accounts created in 5 minutes</description>
+    <mitre>
+      <id>T1136.001</id>
+    </mitre>
+    <group>account_management,suspicious,persistence,</group>
+  </rule>
+
+</group>
+
+<group name="local,file_integrity,">
+
+  <!-- Rule 100030: /etc/shadow accessed or modified -->
+  <rule id="100030" level="10">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">/etc/shadow</field>
+    <description>CRITICAL File Access: /etc/shadow modified (credential theft risk)</description>
+    <mitre>
+      <id>T1003.008</id>
+    </mitre>
+    <group>file_integrity,credential_access,</group>
+  </rule>
+
+  <!-- Rule 100031: SSH private key accessed -->
+  <rule id="100031" level="10">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">\.ssh/id_rsa$|\.ssh/id_ed25519$|\.ssh/id_ecdsa$</field>
+    <description>CRITICAL File Access: SSH private key accessed</description>
+    <mitre>
+      <id>T1552.004</id>
+    </mitre>
+    <group>file_integrity,credential_access,</group>
+  </rule>
+
+  <!-- Rule 100032: /etc/passwd modified -->
+  <rule id="100032" level="12">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">^/etc/passwd$</field>
+    <field name="syscheck.event">modified</field>
+    <description>CRITICAL: /etc/passwd modified (account manipulation)</description>
+    <mitre>
+      <id>T1098</id>
+    </mitre>
+    <group>file_integrity,account_manipulation,</group>
+  </rule>
+
+  <!-- Rule 100033: /etc/sudoers modified -->
+  <rule id="100033" level="12">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">/etc/sudoers</field>
+    <description>CRITICAL: Sudoers file modified (privilege escalation)</description>
+    <mitre>
+      <id>T1548.003</id>
+    </mitre>
+    <group>file_integrity,privilege_escalation,</group>
+  </rule>
+
+  <!-- Rule 100034: Cron job added/modified (persistence) -->
+  <rule id="100034" level="9">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">/etc/cron|/var/spool/cron</field>
+    <description>Persistence: Cron job added or modified</description>
+    <mitre>
+      <id>T1053.003</id>
+    </mitre>
+    <group>file_integrity,persistence,</group>
+  </rule>
+
+  <!-- Rule 100035: Systemd service added/modified (persistence) -->
+  <rule id="100035" level="9">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">/etc/systemd/system|/lib/systemd/system</field>
+    <field name="syscheck.event">added|modified</field>
+    <description>Persistence: Systemd service created or modified</description>
+    <mitre>
+      <id>T1543.002</id>
+    </mitre>
+    <group>file_integrity,persistence,</group>
+  </rule>
+
+  <!-- Rule 100036: Bash history cleared (anti-forensics) -->
+  <rule id="100036" level="11">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">\.bash_history$</field>
+    <field name="syscheck.size_after">^0$</field>
+    <description>Defense Evasion: Bash history cleared (anti-forensics)</description>
+    <mitre>
+      <id>T1070.003</id>
+    </mitre>
+    <group>file_integrity,defense_evasion,anti_forensics,</group>
+  </rule>
+
+  <!-- Rule 100037: Authorized_keys modified (SSH backdoor) -->
+  <rule id="100037" level="11">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">\.ssh/authorized_keys$</field>
+    <field name="syscheck.event">modified|added</field>
+    <description>Persistence: SSH authorized_keys modified (backdoor risk)</description>
+    <mitre>
+      <id>T1098.004</id>
+    </mitre>
+    <group>file_integrity,persistence,backdoor,</group>
+  </rule>
+
+  <!-- Rule 100038: Binary modified in system directories (rootkit) -->
+  <rule id="100038" level="13">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">^/bin/|^/sbin/|^/usr/bin/|^/usr/sbin/</field>
+    <field name="syscheck.event">modified</field>
+    <description>CRITICAL: System binary modified (ROOTKIT suspected)</description>
+    <mitre>
+      <id>T1014</id>
+      <id>T1554</id>
+    </mitre>
+    <group>file_integrity,rootkit,malware,</group>
+  </rule>
+
+  <rule id="100039" level="7">
+    <if_sid>550,554</if_sid>
+    <field name="syscheck.path">^/tmp/.*\.sh$</field>
+    <description>Suspicious: .sh file created in /tmp</description>
+    <mitre>
+      <id>T1204</id>
+    </mitre>
+    <group>file_integrity,suspicious,</group>
+  </rule>
+
+  <!-- Rule 100040: Hidden file created (starts with .) -->
+  <rule id="100040" level="6">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">/\.[^/]+$</field>
+    <field name="syscheck.event">added</field>
+    <description>Suspicious: Hidden file created</description>
+    <mitre>
+      <id>T1564.001</id>
+    </mitre>
+    <group>file_integrity,defense_evasion,</group>
+  </rule>
+
+  <!-- Rule 100041: File in /dev/shm (common malware location) -->
+  <rule id="100041" level="9">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">^/dev/shm/</field>
+    <description>Malware Indicator: File created in /dev/shm (common malware tactic)</description>
+    <mitre>
+      <id>T1036</id>
+    </mitre>
+    <group>file_integrity,malware,</group>
+  </rule>
+
+</group>
+
+<group name="local,process_execution,malware,">
+
+  <!-- Rule 100050: Reverse shell pattern detected -->
+  <rule id="100050" level="13">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">bash|sh|python|perl|nc|ncat</field>
+    <regex>-e /bin/bash|/bin/sh|&gt;/dev/tcp|/dev/tcp/|exec\s+\d+&lt;&gt;/dev/tcp</regex>
+    <description>CRITICAL: Reverse shell command detected</description>
+    <mitre>
+      <id>T1059</id>
+      <id>T1071</id>
+    </mitre>
+    <group>command_execution,reverse_shell,malware,</group>
+  </rule>
+
+  <!-- Rule 100051: Netcat listener (backdoor) -->
+  <rule id="100051" level="12">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">nc|ncat|netcat</field>
+    <field name="audit.execve.a1">-l|-p</field>
+    <description>Backdoor: Netcat listener started</description>
+    <mitre>
+      <id>T1571</id>
+    </mitre>
+    <group>backdoor,persistence,</group>
+  </rule>
+
+  <!-- Rule 100052: wget/curl downloading from internet -->
+  <rule id="100052" level="6">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">wget|curl</field>
+    <regex>http://|https://|ftp://</regex>
+    <description>File Download: wget/curl downloading from internet</description>
+    <mitre>
+      <id>T1105</id>
+    </mitre>
+    <group>file_download,ingress_tool_transfer,</group>
+  </rule>
+
+<!-- Rule 100053: Suspicious chmod +x -->
+  <rule id="100053" level="7">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">chmod</field>
+    <match>chmod</match>
+    <regex>777|755|+x</regex>
+    <description>Suspicious: File made executable via chmod</description>
+    <mitre>
+      <id>T1222</id>
+    </mitre>
+    <group>permission_modification,</group>
+  </rule>
+  <!-- Rule 100054: Known crypto miner process names -->
+  <rule id="100054" level="13">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">xmrig|minergate|cpuminer|ethminer|nanominer</field>
+    <description>MALWARE: Cryptocurrency miner detected</description>
+    <mitre>
+      <id>T1496</id>
+    </mitre>
+    <group>malware,crypto_miner,</group>
+  </rule>
+
+  <!-- Rule 100055: LD_PRELOAD usage (rootkit technique) -->
+  <rule id="100055" level="11">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">LD_PRELOAD</field>
+    <description>Rootkit Technique: LD_PRELOAD environment variable used</description>
+    <mitre>
+      <id>T1055.009</id>
+    </mitre>
+    <group>rootkit,defense_evasion,</group>
+  </rule>
+
+  <!-- Rule 100056: Base64 decode (potential obfuscation) -->
+  <rule id="100056" level="7">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">base64</field>
+    <field name="audit.execve.a1">-d|--decode</field>
+    <description>Obfuscation: Base64 decode command executed</description>
+    <mitre>
+      <id>T1027</id>
+    </mitre>
+    <group>defense_evasion,obfuscation,</group>
+  </rule>
+
+</group>
+
+<group name="local,defense_evasion,">
+
+  <!-- Rule 100060: Audit daemon stopped -->
+  <rule id="100060" level="12">
+    <if_sid>2502,2503</if_sid>
+    <match>auditd</match>
+    <description>Defense Evasion: Audit daemon stopped (anti-forensics)</description>
+    <mitre>
+      <id>T1562.001</id>
+    </mitre>
+    <group>defense_evasion,service_stopped,</group>
+  </rule>
+
+  <!-- Rule 100061: Syslog service stopped -->
+  <rule id="100061" level="12">
+    <if_sid>2502,2503</if_sid>
+    <match>rsyslog|syslog</match>
+    <description>Defense Evasion: Syslog service stopped (anti-forensics)</description>
+    <mitre>
+      <id>T1562.001</id>
+    </mitre>
+    <group>defense_evasion,service_stopped,</group>
+  </rule>
+
+  <!-- Rule 100062: Wazuh agent stopped -->
+  <rule id="100062" level="13">
+    <if_sid>2502,2503</if_sid>
+    <match>wazuh-agent|ossec</match>
+    <description>CRITICAL: Wazuh agent stopped (security evasion)</description>
+    <mitre>
+      <id>T1562.001</id>
+    </mitre>
+    <group>defense_evasion,service_stopped,attack,</group>
+  </rule>
+
+  <!-- Rule 100063: Log file deleted -->
+  <rule id="100063" level="10">
+    <if_sid>550</if_sid>
+    <field name="syscheck.path">^/var/log/</field>
+    <field name="syscheck.event">deleted</field>
+    <description>Defense Evasion: Log file deleted</description>
+    <mitre>
+      <id>T1070.002</id>
+    </mitre>
+    <group>defense_evasion,anti_forensics,</group>
+  </rule>
+
+  <!-- Rule 100064: Timestamp modification (touch -t) -->
+  <rule id="100064" level="9">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">touch</field>
+    <field name="audit.execve.a1">-t</field>
+    <description>Defense Evasion: File timestamp modified (anti-forensics)</description>
+    <mitre>
+      <id>T1070.006</id>
+    </mitre>
+    <group>defense_evasion,timestomp,</group>
+  </rule>
+
+</group>
+
+<group name="local,network,exfiltration,">
+
+  <!-- Rule 100070: Large SCP transfer (potential data exfiltration) -->
+  <rule id="100070" level="8">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">scp</field>
+    <description>Data Exfiltration: SCP file transfer initiated</description>
+    <mitre>
+      <id>T1048.002</id>
+    </mitre>
+    <group>exfiltration,data_transfer,</group>
+  </rule>
+
+  <!-- Rule 100071: Database dump command -->
+  <rule id="100071" level="9">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">mysqldump|pg_dump|mongodump</field>
+    <description>Data Exfiltration: Database dump command executed</description>
+    <mitre>
+      <id>T1005</id>
+    </mitre>
+    <group>exfiltration,data_collection,</group>
+  </rule>
+
+  <!-- Rule 100072: Tar/zip creating archive (potential data staging) -->
+  <rule id="100072" level="6">
+    <decoded_as>auditd</decoded_as>
+    <field name="audit.execve.a0">tar|zip|gzip</field>
+    <field name="audit.execve.a1">-c|-z</field>
+    <description>Data Staging: Archive created (potential exfiltration prep)</description>
+    <mitre>
+      <id>T1560</id>
+    </mitre>
+    <group>exfiltration,data_staging,</group>
+  </rule>
+
+</group>
+
+<group name="local,suricata,ids,">
+
+  <!-- Rule 100080: Suricata - High severity alert -->
+  <rule id="100080" level="12">
+    <program_name>suricata</program_name>
+    <field name="alert.severity">^1$</field>
+    <description>Suricata: HIGH SEVERITY network alert</description>
+    <group>suricata,ids,network_attack,</group>
+  </rule>
+
+  <!-- Rule 100081: Suricata - SQL injection -->
+  <rule id="100081" level="13">
+    <program_name>suricata</program_name>
+    <field name="alert.signature">SQL Injection|sql injection</field>
+    <description>Suricata: SQL INJECTION attack detected</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>suricata,web_attack,sql_injection,</group>
+  </rule>
+
+  <!-- Rule 100082: Suricata - Command injection / RCE -->
+  <rule id="100082" level="13">
+    <program_name>suricata</program_name>
+    <field name="alert.signature">Command Injection|command injection|Remote Code Execution|RCE</field>
+    <description>Suricata: COMMAND INJECTION / RCE detected</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>suricata,web_attack,command_injection,</group>
+  </rule>
+
+  <!-- Rule 100083: Suricata - Port scan -->
+  <rule id="100083" level="8">
+    <program_name>suricata</program_name>
+    <field name="alert.signature">Port Scan|port scan|SCAN</field>
+    <description>Suricata: Port scanning detected</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>suricata,reconnaissance,port_scan,</group>
+  </rule>
+
+  <!-- Rule 100084: Suricata - SSH brute force -->
+  <rule id="100084" level="11">
+    <program_name>suricata</program_name>
+    <field name="alert.signature">SSH.*brute|SSH.*scan</field>
+    <description>Suricata: SSH brute force attack detected</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>suricata,brute_force,ssh,</group>
+  </rule>
+
+  <!-- Rule 100085: Suricata - Exploit attempt -->
+  <rule id="100085" level="13">
+    <program_name>suricata</program_name>
+    <field name="alert.signature">EXPLOIT|exploit|CVE-</field>
+    <description>Suricata: EXPLOIT attempt detected</description>
+    <mitre>
+      <id>T1203</id>
+    </mitre>
+    <group>suricata,exploit,</group>
+  </rule>
+
+  <!-- Rule 100086: Suricata - Malware/C2 communication -->
+  <rule id="100086" level="14">
+    <program_name>suricata</program_name>
+    <field name="alert.signature">MALWARE|Trojan|Backdoor|C2|Command and Control</field>
+    <description>Suricata: MALWARE / C2 communication detected</description>
+    <mitre>
+      <id>T1071</id>
+    </mitre>
+    <group>suricata,malware,c2,</group>
+  </rule>
+
+  <!-- Rule 100087: Suricata - Web shell -->
+  <rule id="100087" level="13">
+    <program_name>suricata</program_name>
+    <field name="alert.signature">Web Shell|webshell|php shell</field>
+    <description>Suricata: WEB SHELL detected</description>
+    <mitre>
+      <id>T1505.003</id>
+    </mitre>
+    <group>suricata,web_attack,web_shell,</group>
+  </rule>
+
+  <!-- Rule 100088: Suricata - Directory traversal -->
+  <rule id="100088" level="10">
+    <program_name>suricata</program_name>
+    <field name="alert.signature">Directory Traversal|Path Traversal</field>
+    <description>Suricata: Directory traversal attempt</description>
+    <mitre>
+      <id>T1190</id>
+    </mitre>
+    <group>suricata,web_attack,</group>
+  </rule>
+
+</group>
+
+<group name="local,pfsense,firewall,">
+
+  <!-- Rule 100090: pfSense - Connection blocked -->
+  <rule id="100090" level="3">
+    <program_name>pfsense-firewall</program_name>
+    <regex>block</regex>
+    <description>pfSense: Connection blocked by firewall</description>
+    <group>firewall,blocked,</group>
+  </rule>
+
+  <!-- Rule 100091: pfSense - Multiple blocks from same IP (suspicious) -->
+  <rule id="100091" level="7" frequency="10" timeframe="60">
+    <if_matched_sid>100090</if_matched_sid>
+    <same_source_ip />
+    <description>pfSense: Multiple blocks from same IP (10 in 60s)</description>
+    <group>firewall,blocked,suspicious,</group>
+  </rule>
+
+  <!-- Rule 100092: pfSense - Port scan detected -->
+  <rule id="100092" level="9" frequency="20" timeframe="120">
+    <if_matched_sid>100090</if_matched_sid>
+    <same_source_ip />
+    <description>pfSense: PORT SCAN detected (20+ blocks from same IP)</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>firewall,port_scan,reconnaissance,</group>
+  </rule>
+
+  <!-- Rule 100093: pfSense - Critical threshold (auto-block trigger) -->
+  <rule id="100093" level="12" frequency="30" timeframe="180">
+    <if_matched_sid>100090</if_matched_sid>
+    <same_source_ip />
+    <description>pfSense: CRITICAL - Aggressive scanning (30+ blocks), triggering auto-block</description>
+    <mitre>
+      <id>T1046</id>
+    </mitre>
+    <group>firewall,port_scan,attack,auto_block,</group>
+  </rule>
+
+</group>

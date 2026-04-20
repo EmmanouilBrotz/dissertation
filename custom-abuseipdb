@@ -1,0 +1,89 @@
+#!/usr/bin/env python3
+
+import json
+import sys
+import os
+import requests
+
+# AbuseIPDB API Key - REPLACE WITH YOUR KEY
+ABUSEIPDB_API_KEY = "YOUR_API_KEY_HERE"
+
+# File to log API usage (for debugging)
+LOG_FILE = "/var/ossec/logs/integrations.log"
+
+def log_message(message):
+    with open(LOG_FILE, 'a') as f:
+        f.write(f"{message}\n")
+
+# Read Wazuh alert from file
+try:
+    alert_file_path = sys.argv[1]
+    with open(alert_file_path) as alert_file:
+        alert_json = json.loads(alert_file.read())
+        alert_file.close()
+except Exception as e:
+    log_message(f"Error reading alert: {e}")
+    sys.exit(1)
+
+# Extract source IP from alert
+src_ip = alert_json.get('data', {}).get('srcip', None)
+
+# Exit if no valid IP
+if not src_ip or src_ip == 'null' or src_ip == '':
+    sys.exit(0)
+
+# Skip private/internal IPs
+if src_ip.startswith(('192.168.', '10.', '172.16.', '127.')):
+    sys.exit(0)
+
+log_message(f"Checking IP: {src_ip}")
+
+# Query AbuseIPDB API
+url = 'https://api.abuseipdb.com/api/v2/check'
+headers = {
+    'Accept': 'application/json',
+    'Key': ABUSEIPDB_API_KEY
+}
+params = {
+    'ipAddress': src_ip,
+    'maxAgeInDays': '90',
+    'verbose': ''
+}
+
+try:
+    response = requests.get(url, headers=headers, params=params, timeout=5)
+    if response.status_code == 200:
+        data = response.json()
+        ip_data = data.get('data', {})
+
+        confidence_score = ip_data.get('abuseConfidenceScore', 0)
+        total_reports = ip_data.get('totalReports', 0)
+        country_code = ip_data.get('countryCode', 'Unknown')
+        usage_type = ip_data.get('usageType', 'Unknown')
+        isp = ip_data.get('isp', 'Unknown')
+
+        # Only alert if confidence score is above threshold
+        if confidence_score >= 50:
+            # Output enriched data back to Wazuh
+            enrichment = {
+                "abuseipdb": {
+                    "source_ip": src_ip,
+                    "abuse_confidence_score": confidence_score,
+                    "total_reports": total_reports,
+                    "country_code": country_code,
+                    "usage_type": usage_type,
+                    "isp": isp,
+                    "is_malicious": True
+                }
+            }
+
+            log_message(f"Malicious IP found: {src_ip} (Score: {confidence_score})")
+            print(json.dumps(enrichment))
+        else:
+            log_message(f"IP {src_ip} is clean (Score: {confidence_score})")
+    else:
+        log_message(f"API Error: {response.status_code}")
+
+except Exception as e:
+    log_message(f"Exception: {e}")
+    sys.exit(0)
